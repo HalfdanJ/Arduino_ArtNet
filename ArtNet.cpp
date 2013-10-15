@@ -13,7 +13,9 @@ static uint8_t artnetID[] = {'A', 'r', 't', '-', 'N', 'e', 't', 0x00};
 
 
 
-ArtNet::ArtNet() {
+ArtNet::ArtNet(uint16_t bufferSize) {
+    this->bufferSize = bufferSize;
+    buffer = (uint8_t*)malloc(bufferSize);
 	net = 0;
 	subnet = 0;
 	shortName[0] = 0;
@@ -25,10 +27,6 @@ ArtNet::ArtNet() {
 		portAddrOut[i] = i;
 	}
 	mac = NULL;
-}
-
-void ArtNet::begin() {
-	begin(NULL);
 }
 
 void ArtNet::begin(const uint8_t *mac) {
@@ -51,24 +49,20 @@ int ArtNet::parsePacket() {
 		return 0;
 	}
 	
-	// Read header ID
-	uint8_t id[8];
-	udp.read(id, sizeof(id));
+	// Read header ID + OpCode
+    udp.read(buffer, 10);
 	
 	// Check ID
-	if (memcmp(id, artnetID, sizeof(artnetID)) != 0) {
+	if (memcmp(buffer, artnetID, sizeof(artnetID)) != 0) {
 		udp.flush();
 		return 0;
 	}
-	
-	//Read OpCode
-	udp.read((uint8_t*)&opCode, sizeof(opCode));
-	
+		
 	return n;
 }
 
 uint16_t ArtNet::getOpCode() {
-	return opCode;
+	return buffer[8] | (buffer[9] << 8);
 }
 
 void ArtNet::setNet(uint8_t net) {
@@ -83,8 +77,16 @@ void ArtNet::setShortName(const char *shortName) {
 	memcpy(this->shortName, shortName, 18);
 }
 
+char* ArtNet::getShortName() {
+	return shortName;
+}
+
 void ArtNet::setLongName(const char *longName) {
 	memcpy(this->longName, longName, 64);
+}
+
+char* ArtNet::getLongName() {
+	return longName;
 }
 
 void ArtNet::setNumPorts(uint8_t numPorts) {
@@ -102,22 +104,40 @@ void ArtNet::setPortAddress(uint8_t port, uint8_t address) {
 
 	if (portTypes[port] & ARTNET_TYPE_INPUT)
 		this->portAddrIn[port] = address;
-
-	if (portTypes[port] & ARTNET_TYPE_OUTPUT)
+	else if (portTypes[port] & ARTNET_TYPE_OUTPUT)
 		this->portAddrOut[port] = address;
+    else {
+        this->portAddrIn[port] = address;
+        this->portAddrOut[port] = address;
+    }
+
 }
 
 void ArtNet::setMac(const uint8_t *mac) {
 	this->mac = mac;
 }
 
+uint8_t ArtNet::getPortType(uint8_t port) {
+	port &= 3;
+	return this->portTypes[port];
+}
+
+uint8_t ArtNet::getPortOutFromUni(uint8_t uni) {
+    for (int i=0; i<4; i++) {
+        if ((portAddrOut[i] == uni) ) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+
 void ArtNet::readPoll(artnet_poll *poll) {
 	udp.read((uint8_t*)poll, sizeof(poll));
 }
 
-void ArtNet::readPoll() {
-	artnet_poll poll;
-	readPoll(&poll);
+artnet_poll* ArtNet::readPoll() {
+	udp.read(buffer+10, sizeof(artnet_poll));
 }
 
 void ArtNet::readDmx(artnet_dmx_header *header, uint8_t *data, uint16_t length) {
@@ -137,17 +157,44 @@ void ArtNet::readDmxHeader(artnet_dmx_header *header) {
 	header->length = ((header->length & 0xff) << 8) | (header->length >> 8);
 }
 
+artnet_dmx_header* ArtNet::readDmxHeader() {
+	
+    artnet_dmx_header* header = (artnet_dmx_header*)(buffer+10);
+	udp.read((uint8_t*)header, sizeof(artnet_dmx_header));
+	header->length = ((header->length & 0xff) << 8) | (header->length >> 8);
+    return (artnet_dmx_header*)header;
+}
+
 void ArtNet::readDmxData(uint8_t *data, uint16_t length) {
 	
 	udp.read(data, length);
+}
+
+uint8_t* ArtNet::readDmxData(uint16_t length) {
+	
+    uint8_t* data = buffer+10+sizeof(artnet_dmx_header);
+	udp.read(data, length);
+    return data;
 }
 
 void ArtNet::readIpProg(artnet_ip_prog *ipprog) {
     udp.read((uint8_t*)ipprog, sizeof(artnet_ip_prog));
 }
 
+artnet_ip_prog* ArtNet::readIpProg() {
+    artnet_ip_prog *ipprog = (artnet_ip_prog*)(buffer+10);
+    udp.read((uint8_t*)ipprog, sizeof(artnet_ip_prog));
+    return ipprog;
+}
+
 void ArtNet::readAddress(artnet_address *address) {
     udp.read((uint8_t*)address, sizeof(artnet_address));
+}
+
+artnet_address* ArtNet::readAddress() {
+    artnet_address *address = (artnet_address*)(buffer+10);
+    udp.read((uint8_t*)address, sizeof(artnet_address));
+    return address;
 }
 
 void ArtNet::flush() {
@@ -156,7 +203,35 @@ void ArtNet::flush() {
 
 void ArtNet::sendPollReply() {
 
-	udp.beginPacket(udp.remoteIP(), udp.remotePort());
+    memset(buffer, 0, 10+sizeof(artnet_poll_reply));
+    memcpy(buffer, artnetID, sizeof(artnetID));
+    buffer[8] = ARTNET_OPCODE_POLLREPLY & 0xFF;
+    buffer[9] = ARTNET_OPCODE_POLLREPLY >> 8;
+    
+    artnet_poll_reply* reply = (artnet_poll_reply*)(buffer+10);
+    
+    uint32_t ip = Ethernet.localIP();
+    memcpy(reply->ip, &ip, 4);
+    
+    reply->port = ARTNET_UDP_PORT;
+    
+    reply->netSwitch = net;
+    reply->subSwitch = subnet;
+    strcpy(reply->shortName, shortName);
+    strcpy(reply->longName, longName);
+    
+    reply->numPortsLo = numPorts;
+    memcpy(reply->portTypes, portTypes, 4);
+    memcpy(reply->swIn, portAddrIn, 4);
+    memcpy(reply->swOut, portAddrOut, 4);
+    memcpy(reply->mac, mac, 6);
+    
+    
+    udp.beginPacket(udp.remoteIP(), udp.remotePort());
+    udp.write(buffer, 10+sizeof(artnet_poll_reply));
+    udp.endPacket();
+
+	/*udp.beginPacket(udp.remoteIP(), udp.remotePort());
 
 	udp.write(artnetID, sizeof(artnetID));
 	
@@ -224,7 +299,7 @@ void ArtNet::sendPollReply() {
 	}
 
 
-	udp.endPacket();
+	udp.endPacket();*/
 }
 
 void ArtNet::sendIpProgReply(artnet_ip_prog *ipprog) {
