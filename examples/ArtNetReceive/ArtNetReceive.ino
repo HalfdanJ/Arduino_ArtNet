@@ -2,7 +2,7 @@
 #include <Ethernet.h>
 #include <ArtNet.h>
 
-// Art-Net class instance with 1024 bytes buffer
+// ArtNet class instance with 1024 bytes buffer
 ArtNet artnet = ArtNet(1024);
 
 // Defaults
@@ -13,30 +13,31 @@ void setup() {
   // Farstest SPI for ethernet
   SPI.setClockDivider(SPI_CLOCK_DIV2);
   
+  // Initialize Ethernet shield
   Ethernet.begin(mac);
   
-  // Init artnet
-  artnet.setNumPorts(1);
+  // Initialize ArtNet handler
+  artnet.setNumPorts(1); // Inputs or outputs. Maximum is 4.
   artnet.setPortAddress(0, 0); // Port 0, address 0
-  artnet.setPortType(0, ARTNET_TYPE_OUTPUT | ARTNET_TYPE_DMX);
-  artnet.begin(mac);
+  artnet.begin(mac); // Start ArtNet handling
 }
 
 void loop() {
 
-  int packetSize = artnet.parsePacket();
-  if(packetSize) {
+  // Receive ArtNet package from Ethernet shield
+  if(artnet.parsePacket()) {
+    
+    // Read and handle packet
+    artnet.handleAny();
 
+    // Check packet type
     if(artnet.getOpCode() == ARTNET_OPCODE_DMX) {
-        
-      artnet_dmx_header* header = artnet.readDmxHeader();
-      byte port = artnet.getPortOutFromUni(header->subUni);
-      byte *dmx = artnet.readDmxData(header->length);
+
+      // Get header and dmx data
+      byte* dmx = artnet.getDmxData();
+      byte port = artnet.getDmxPort();
 
       // Do your DMX handling here!!
-    }
-    else {
-      artnet.flush();
     }
   }
 }

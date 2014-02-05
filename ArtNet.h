@@ -37,6 +37,11 @@
 
 #define ARTNET_DHCP_ENABLED     0x40
 
+typedef struct _artnet_header {
+	uint8_t  id[8];
+    uint16_t opCode;
+} artnet_header;
+
 typedef struct _artnet_poll {
 	uint8_t protVerHi;
 	uint8_t protVerLo;
@@ -140,29 +145,40 @@ public:
 	int parsePacket();
 	
 	uint16_t getOpCode();
+    void     setOpCode(uint16_t opCode);
+    
+    void*    getData();
+    
+    // DMX Accessors
+    uint8_t* getDmxData();
+    uint16_t getDmxLength();
+    uint8_t  getDmxPort();
+    
+    // IpProg Accessors
+    uint8_t  getIpCommand();
+    
+    // Member Accessors
     char*    getShortName();
     char*    getLongName();
     uint8_t  getPortType(uint8_t port);
     uint8_t  getPortAddress(uint8_t port);
     uint8_t  getPortOutFromUni(uint8_t uni);
-	
-	void readPoll(artnet_poll *poll);
-	void readDmx(artnet_dmx_header *header, uint8_t *data, uint16_t length);
-	void readDmxHeader(artnet_dmx_header *header);
-	void readDmxData(uint8_t *data, uint16_t length);
-    void readIpProg(artnet_ip_prog *ipprog);
-    void readAddress(artnet_address *address);
-    
-    artnet_poll*        readPoll();
-    artnet_dmx_header*  readDmxHeader();
-    uint8_t*            readDmxData(uint16_t length);
-    artnet_ip_prog*     readIpProg();
-    artnet_address*     readAddress();
+	   
+    void readPoll();
+    void readDmx();
+    void readIpProg();
+    void readAddress();
 	
 	void flush();
 	
 	void sendPollReply();
-    void sendIpProgReply(artnet_ip_prog *ipprog);
+    void sendIpProgReply();
+
+    void handlePoll();
+    void handleDmx();
+    void handleIpProg();
+    void handleAddress();
+    void handleAny();
 
 private:
 	EthernetUDP udp;
@@ -170,7 +186,6 @@ private:
     uint8_t* buffer;
     uint16_t bufferSize;
     
-	uint16_t opCode;
     uint8_t  verHi;
     uint8_t  verLo;
 	uint8_t  net;
