@@ -11,10 +11,10 @@ Following things can be done to speed up ArtNet reception:
 ```cpp
 SPI.setClockDivider(SPI_CLOCK_DIV2);
 ```
-* Memory allocation. The Ethernet chip has 16 Kb of memory, which is divided between 8 sockets by default. Since ArtNet is only using one UDP socket we can re-allocate all the memory to that socket. In order to do so, it is necessary to use a different version of the standard Ethernet library: [WIZ_Ethernet_Library](https://github.com/media-architecture/WIZ_Ethernet_Library)
+* Memory allocation. The W5100 Ethernet chip has 16 Kb of memory (8 RX + 8 TX), which is divided between 4 sockets by default. Since ArtNet is only using one UDP socket we can re-allocate all the memory to that socket. In order to do so, it is necessary to use a different version of the standard Ethernet library: [WIZ_Ethernet_Library](https://github.com/media-architecture/WIZ_Ethernet_Library)
 Once installed, it allows you to set up the memory allocation like this:
 ```cpp
-uint16_t sizes[8] = {(16<<10),0,0,0,0,0,0,0}; // 16 Kb memory to the first socket
+uint16_t sizes[8] = {8192,0,0,0}; // 8 Kb memory to the first socket
 W5100.setRXMemorySizes(sizes);
 ```
 * Unicast instead of broadcast. If your software broadcasts Art-Net packets to more than one Art-Net node, they will all receive all of the packets and need to decide for them self wether to handle them or not. This is completely unnecessary and will slow down your Art-Net stream.
