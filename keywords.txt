@@ -7,12 +7,7 @@
 #######################################
 
 ArtNet	KEYWORD1
-artnet_header	KEYWORD1
-artnet_poll	KEYWORD1
-artnet_poll_reply	KEYWORD1
-artnet_dmx_header	KEYWORD1
-artnet_ip_prog	KEYWORD1
-artnet_address	KEYWORD1
+ArtNetConfig	KEYWORD1
 
 #######################################
 # Methods and Functions (KEYWORD2)

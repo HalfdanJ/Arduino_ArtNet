@@ -122,14 +122,32 @@ typedef struct _artnet_address {
     uint8_t command;
 } artnet_address;
 
+typedef struct _ArtnetConfig {
+    uint8_t  mac[6];
+    uint8_t  ip[4];
+    uint8_t  mask[4];
+    uint16_t udpPort;
+    uint8_t  dhcp;
+    uint8_t  net;
+    uint8_t  subnet;
+    char     shortName[18];
+    char     longName[64];
+    uint8_t  numPorts;
+    uint8_t  portTypes[4];
+    uint8_t  portAddrIn[4];
+    uint8_t  portAddrOut[4];
+    uint8_t  verHi;
+    uint8_t  verLo;
+} ArtNetConfig;
 
 class ArtNet {
 public:
 
-	ArtNet(uint16_t bufferSize = 1024);
+    ArtNet(uint16_t bufferSize = 1024);
+    ArtNet(ArtNetConfig & config, uint16_t bufferSize = 1024);
 	
 	void begin();
-	void begin(const uint8_t *mac = NULL);
+    void begin(const uint8_t* mac);
 	void stop();
 	
     void setVersion(uint8_t verHi, uint8_t verLo);
@@ -186,17 +204,18 @@ private:
     uint8_t* buffer;
     uint16_t bufferSize;
     
-    uint8_t  verHi;
+    /*uint8_t  verHi;
     uint8_t  verLo;
-	uint8_t  net;
-	uint8_t  subnet;
-	char     shortName[18];
-	char     longName[64];
-	uint8_t  numPorts;
-	uint8_t  portTypes[4];
-	uint8_t  portAddrIn[4];
-	uint8_t  portAddrOut[4];
-	const uint8_t *mac;
+    uint8_t  net;
+    uint8_t  subnet;
+    char     shortName[18];
+    char     longName[64];
+    uint8_t  numPorts;
+    uint8_t  portTypes[4];
+    uint8_t  portAddrIn[4];
+    uint8_t  portAddrOut[4];
+    const uint8_t *mac;*/
+    ArtNetConfig *config;
 };
 
 #endif

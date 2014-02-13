@@ -11,27 +11,41 @@
 
 static uint8_t artnetID[] = {'A', 'r', 't', '-', 'N', 'e', 't', 0x00};
 
-
-
 ArtNet::ArtNet(uint16_t bufferSize) {
+
     this->bufferSize = bufferSize;
     buffer = (uint8_t*)malloc(bufferSize);
-	net = 0;
-	subnet = 0;
-	shortName[0] = 0;
-	longName[0] = 0;
-	numPorts = 0;
-	for (int i=0; i<4; i++) {
-		portTypes[i] = ARTNET_TYPE_OUTPUT | ARTNET_TYPE_DMX;
-		portAddrIn[i] = i;
-		portAddrOut[i] = i;
-	}
-	mac = NULL;
+    
+    this->config = new ArtNetConfig();
+    memset(this->config, 0, sizeof(ArtNetConfig));
+    
+    strcpy(config->shortName, "Art-Net Node");
+    strcpy(config->longName, config->shortName);
+    config->udpPort = ARTNET_UDP_PORT;
+    config->dhcp = true;
+    config->numPorts = 1;
+    for (int i=0; i<4; i++) {
+        config->portTypes[i] = ARTNET_TYPE_OUTPUT | ARTNET_TYPE_DMX;
+        config->portAddrIn[i] = i;
+        config->portAddrOut[i] = i;
+    }
 }
 
-void ArtNet::begin(const uint8_t *mac) {
-	this->mac = mac;
-	udp.begin(ARTNET_UDP_PORT);
+ArtNet::ArtNet(ArtNetConfig & config, uint16_t bufferSize) {
+    
+    this->bufferSize = bufferSize;
+    buffer = (uint8_t*)malloc(bufferSize);
+
+    this->config = &config;
+}
+
+void ArtNet::begin() {
+	udp.begin(config->udpPort);
+}
+
+void ArtNet::begin(const uint8_t* mac) {
+    memcpy(config->mac, mac, 6);
+	udp.begin(config->udpPort);
 }
 
 void ArtNet::stop() {
@@ -91,70 +105,70 @@ uint8_t ArtNet::getIpCommand() {
 }
 
 void ArtNet::setNet(uint8_t net) {
-	this->net = net;
+	this->config->net = net;
 }
 
 void ArtNet::setSubNet(uint8_t subnet) {
-	this->subnet = subnet;
+	this->config->subnet = subnet;
 }
 
 void ArtNet::setShortName(const char *shortName) {
-	memcpy(this->shortName, shortName, 18);
+	memcpy(this->config->shortName, shortName, 18);
 }
 
 char* ArtNet::getShortName() {
-	return shortName;
+	return config->shortName;
 }
 
 void ArtNet::setLongName(const char *longName) {
-	memcpy(this->longName, longName, 64);
+	memcpy(this->config->longName, longName, 64);
 }
 
 char* ArtNet::getLongName() {
-	return longName;
+	return config->longName;
 }
 
 void ArtNet::setNumPorts(uint8_t numPorts) {
-	this->numPorts = numPorts < 4 ? numPorts : 4;
+	this->config->numPorts = numPorts < 4 ? numPorts : 4;
 }
 
 void ArtNet::setPortType(uint8_t port, uint8_t type) {
 	port &= 3;
-	this->portTypes[port] = type;
+	this->config->portTypes[port] = type;
 }
 
 void ArtNet::setPortAddress(uint8_t port, uint8_t address) {
 	
 	port &= 3;
 
-	if (portTypes[port] & ARTNET_TYPE_INPUT)
-		this->portAddrIn[port] = address;
-	else if (portTypes[port] & ARTNET_TYPE_OUTPUT)
-		this->portAddrOut[port] = address;
+	if (config->portTypes[port] & ARTNET_TYPE_INPUT)
+		this->config->portAddrIn[port] = address;
+	else if (config->portTypes[port] & ARTNET_TYPE_OUTPUT)
+		this->config->portAddrOut[port] = address;
     else {
-        this->portAddrIn[port] = address;
-        this->portAddrOut[port] = address;
+        this->config->portAddrIn[port] = address;
+        this->config->portAddrOut[port] = address;
     }
 
 }
 
 void ArtNet::setMac(const uint8_t *mac) {
-	this->mac = mac;
+	memcpy(this->config->mac, mac, 6);
 }
 
 uint8_t ArtNet::getPortType(uint8_t port) {
 	port &= 3;
-	return this->portTypes[port];
+	return this->config->portTypes[port];
 }
 
 uint8_t ArtNet::getPortAddress(uint8_t port) {
 	port &= 3;
-	return this->portAddrOut[port];
+	return this->config->portAddrOut[port];
 }
 
 uint8_t ArtNet::getPortOutFromUni(uint8_t uni) {
     for (int i=0; i<4; i++) {
-        if ((portAddrOut[i] == uni) ) {
+        if ((config->portAddrOut[i] == uni) ) {
             return i;
         }
     }
@@ -198,18 +212,21 @@ void ArtNet::sendPollReply() {
     uint32_t ip = Ethernet.localIP();
     memcpy(reply->ip, &ip, 4);
     
-    reply->port = ARTNET_UDP_PORT;
+    reply->port = config->udpPort;
     
-    reply->netSwitch = net;
-    reply->subSwitch = subnet;
-    strcpy(reply->shortName, shortName);
-    strcpy(reply->longName, longName);
+    reply->verHi = config->verHi;
+    reply->verLo = config->verLo;
     
-    reply->numPortsLo = numPorts;
-    memcpy(reply->portTypes, portTypes, 4);
-    memcpy(reply->swIn, portAddrIn, 4);
-    memcpy(reply->swOut, portAddrOut, 4);
-    memcpy(reply->mac, mac, 6);
+    reply->netSwitch = config->net;
+    reply->subSwitch = config->subnet;
+    strcpy(reply->shortName, config->shortName);
+    strcpy(reply->longName, config->longName);
+    
+    reply->numPortsLo = config->numPorts;
+    memcpy(reply->portTypes, config->portTypes, 4);
+    memcpy(reply->swIn, config->portAddrIn, 4);
+    memcpy(reply->swOut, config->portAddrOut, 4);
+    memcpy(reply->mac, config->mac, 6);
     
     
     udp.beginPacket(udp.remoteIP(), udp.remotePort());
@@ -250,14 +267,19 @@ void ArtNet::handleIpProg() {
     artnet_ip_prog* ipprog = (artnet_ip_prog*)getData();
     
     if(ipprog->command & ARTNET_IPCMD_IP) {
+        memcpy(config->ip, ipprog->ip, 4);
+        config->dhcp = false;
         stop();
-        Ethernet.begin((uint8_t*)mac, ipprog->ip);
-        begin(mac);
+        Ethernet.begin(config->mac, config->ip);
+        begin();
     }
     else if(ipprog->command & ARTNET_IPCMD_DHCP) {
+        config->dhcp = true;
         stop();
-        Ethernet.begin((uint8_t*)mac);
-        begin(mac);
+        Ethernet.begin(config->mac);
+        uint32_t ip = Ethernet.localIP();
+        memcpy(config->ip, &ip, 4);
+        begin();
     }
     sendIpProgReply();
 }
@@ -272,7 +294,6 @@ void ArtNet::handleAddress() {
     for(int i=0; i<4; i++) {
         setPortAddress(i, address->swOut[i]);
     }
-    sendPollReply();    
 }
 
 void ArtNet::handleAny() {
