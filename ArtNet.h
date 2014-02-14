@@ -78,7 +78,7 @@ typedef struct _artnet_poll_reply {
     uint8_t  spare[3];
     uint8_t  style;
     uint8_t  mac[6];
-    uint8_t  bindIp;
+    uint8_t  bindIp[4];
     uint8_t  bindIndex;
     uint8_t  status2;
     uint8_t  filler[26];
