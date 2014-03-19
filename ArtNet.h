@@ -1,7 +1,15 @@
 /*
  *  ArtNet.h
  *
- *  Created by Tobias Ebsen on 6/2/13.
+ *  Created by Tobias Ebsen
+ *
+ *  Implementation of the Art-Net protocol for use with the Arduino platform.
+ *
+ *  This file is free software; you can redistribute it and/or modify
+ *  it under the terms of GNU General Public License version 3 as
+ *  published by the Free Software Foundation.
+ *
+ *  Art-Net(TM) Designed by and Copyright Artistic Licence Holdings Ltd
  *
  */
 
@@ -11,12 +19,14 @@
 #include <Ethernet.h>
 #include <EthernetUdp.h>
 
-#define ARTNET_OPCODE_POLL		0x2000
-#define ARTNET_OPCODE_POLLREPLY	0x2100
-#define ARTNET_OPCODE_DMX		0x5000
-#define ARTNET_OPCODE_IPPROG    0xF800
-#define ARTNET_OPCODE_IPREPLY   0xF900
-#define ARTNET_OPCODE_ADDRESS   0x6000
+#define ARTNET_OPCODE_POLL          0x2000
+#define ARTNET_OPCODE_POLLREPLY     0x2100
+#define ARTNET_OPCODE_DMX           0x5000
+#define ARTNET_OPCODE_IPPROG        0xF800
+#define ARTNET_OPCODE_IPREPLY       0xF900
+#define ARTNET_OPCODE_ADDRESS       0x6000
+#define ARTNET_OPCODE_TODREQUEST    0x8000
+#define ARTNET_OPCODE_TODDATA       0x8100
 
 #define ARTNET_TYPE_DMX		0
 #define ARTNET_TYPE_MIDI	1
@@ -122,6 +132,29 @@ typedef struct _artnet_address {
     uint8_t command;
 } artnet_address;
 
+typedef struct _artnet_tod_request {
+    uint8_t protVerHi;
+    uint8_t protVerLo;
+    uint8_t filler[2];
+    uint8_t spare[7];
+    uint8_t net;
+    uint8_t command;
+    uint8_t addCount;
+} artnet_tod_request;
+
+typedef struct _artnet_tod_data {
+    uint8_t  protVerHi;
+    uint8_t  protVerLo;
+    uint8_t  filler[2];
+    uint8_t  spare[7];
+    uint8_t  net;
+    uint8_t  command;
+    uint8_t  address;
+    uint16_t uidTotal;
+    uint8_t  blockCount;
+    uint8_t  uidCount;
+} artnet_tod_data;
+
 typedef struct _ArtnetConfig {
     uint8_t  mac[6];
     uint8_t  ip[4];
@@ -183,20 +216,25 @@ public:
     uint8_t  getPortOutFromUni(uint8_t uni);
 	   
     void readPoll();
+    void readPollReply();
     void readDmx();
     void readIpProg();
     void readAddress();
+    void readTodRequest();
 	
 	void flush();
 	
 	void sendPollReply();
     void sendIpProgReply();
+    void sendTodData();
 
     void handlePoll();
+    void handlePollReply();
     void handleDmx();
     void handleIpProg();
     void handleAddress();
     void handleAny();
+    void handleTodRequest();
 
 private:
 	EthernetUDP udp;

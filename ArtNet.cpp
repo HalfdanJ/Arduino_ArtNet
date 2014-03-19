@@ -40,11 +40,19 @@ ArtNet::ArtNet(ArtNetConfig & config, uint16_t bufferSize) {
 }
 
 void ArtNet::begin() {
+    uint32_t ip = Ethernet.localIP();
+    memcpy(config->ip, &ip, 4);
+    uint32_t sm = Ethernet.subnetMask();
+    memcpy(config->mask, &sm, 4);
 	udp.begin(config->udpPort);
 }
 
 void ArtNet::begin(const uint8_t* mac) {
     memcpy(config->mac, mac, 6);
+    uint32_t ip = Ethernet.localIP();
+    memcpy(config->ip, &ip, 4);
+    uint32_t sm = Ethernet.subnetMask();
+    memcpy(config->mask, &sm, 4);
 	udp.begin(config->udpPort);
 }
 
@@ -71,6 +79,20 @@ int ArtNet::parsePacket() {
 		return 0;
 	}
     
+    switch (getOpCode()) {
+        case ARTNET_OPCODE_POLL:
+            readPoll(); break;
+        case ARTNET_OPCODE_POLLREPLY:
+            readPollReply(); break;
+        case ARTNET_OPCODE_DMX:
+            readDmx(); break;
+        case ARTNET_OPCODE_IPPROG:
+            readIpProg(); break;
+        case ARTNET_OPCODE_ADDRESS:
+            readAddress(); break;
+        default:
+            udp.flush(); break;
+    }
 	return n;
 }
 
@@ -179,22 +201,35 @@ void ArtNet::readPoll() {
 	udp.read(buffer+sizeof(artnet_header), sizeof(artnet_poll));
 }
 
+void ArtNet::readPollReply() {
+	udp.read(buffer+sizeof(artnet_header), sizeof(artnet_poll_reply));
+}
+
 void ArtNet::readDmx() {
     artnet_dmx_header* header = (artnet_dmx_header*)getData();
 	udp.read((uint8_t*)header, sizeof(artnet_dmx_header));
 	header->length = ((header->length & 0xff) << 8) | (header->length >> 8);
-    uint8_t* data = buffer+sizeof(artnet_header)+sizeof(artnet_dmx_header);
-	udp.read(data, header->length);
+    
+    if(getPortOutFromUni(header->subUni) != -1) {
+        uint8_t* data = buffer+sizeof(artnet_header)+sizeof(artnet_dmx_header);
+        udp.read(data, header->length);
+    }
+    else
+        udp.flush();
 }
 
 void ArtNet::readIpProg() {
-    artnet_ip_prog *ipprog = (artnet_ip_prog*)getData();
+    artnet_ip_prog* ipprog = (artnet_ip_prog*)getData();
     udp.read((uint8_t*)ipprog, sizeof(artnet_ip_prog));
+    ipprog->port = ((ipprog->port & 0xff) << 8) | (ipprog->port >> 8);
 }
 
 void ArtNet::readAddress() {
-    artnet_address *address = (artnet_address*)getData();
-    udp.read((uint8_t*)address, sizeof(artnet_address));
+    udp.read(buffer+sizeof(artnet_header), sizeof(artnet_address));
+}
+
+void ArtNet::readTodRequest() {
+    udp.read(buffer+sizeof(artnet_header), sizeof(artnet_tod_request));
 }
 
 void ArtNet::flush() {
@@ -227,7 +262,7 @@ void ArtNet::sendPollReply() {
     memcpy(reply->swIn, config->portAddrIn, 4);
     memcpy(reply->swOut, config->portAddrOut, 4);
     memcpy(reply->mac, config->mac, 6);
-    
+    reply->status2 = 0x0C | (config->dhcp << 1);
     
     udp.beginPacket(udp.remoteIP(), udp.remotePort());
     udp.write(buffer, sizeof(artnet_header)+sizeof(artnet_poll_reply));
@@ -241,51 +276,72 @@ void ArtNet::sendIpProgReply() {
     
     artnet_ip_prog *ipprog = (artnet_ip_prog*)getData();
     
+    ipprog->protVerLo = 14;
+    
     uint32_t i = Ethernet.localIP();
     uint32_t s = Ethernet.subnetMask();
     memcpy(ipprog->ip, &i, 4);
     memcpy(ipprog->subnet, &s, 4);
-    ipprog->port = ARTNET_UDP_PORT;
-    ipprog->status = Ethernet.maintain() == DHCP_CHECK_NONE ? 0 : ARTNET_DHCP_ENABLED;
+    ipprog->port = ((config->udpPort & 0xff) << 8) | (config->udpPort >> 8);
+    ipprog->status = config->dhcp ? 0 : ARTNET_DHCP_ENABLED;
 
 	udp.beginPacket(udp.remoteIP(), udp.remotePort());
     udp.write(buffer, sizeof(artnet_header)+sizeof(artnet_ip_prog));
     udp.endPacket();
 }
 
+void ArtNet::sendTodData() {
+    
+    memcpy(buffer, artnetID, sizeof(artnetID));
+    setOpCode(ARTNET_OPCODE_TODDATA);
+    
+    artnet_tod_data *data = (artnet_tod_data*)getData();
+    
+    data->protVerHi = 0;
+    data->protVerLo = 14;
+    data->net = config->net;
+    data->command = 0xff;
+    data->address = 0;
+    data->uidTotal = 0;
+    data->blockCount = 0;
+    data->uidCount = 0;
+
+	udp.beginPacket(udp.remoteIP(), udp.remotePort());
+    udp.write(buffer, sizeof(artnet_header)+sizeof(artnet_tod_data));
+    udp.endPacket();
+}
+
 void ArtNet::handlePoll() {
-    readPoll();
     sendPollReply();
 }
 
-void ArtNet::handleDmx() {
-    readDmx();
-}
-
 void ArtNet::handleIpProg() {
-    readIpProg();
     artnet_ip_prog* ipprog = (artnet_ip_prog*)getData();
     
-    if(ipprog->command & ARTNET_IPCMD_IP) {
+    if (ipprog->command & ARTNET_IPCMD_PORT)
+        config->udpPort = ipprog->port;
+    if (ipprog->command & ARTNET_IPCMD_IP)
         memcpy(config->ip, ipprog->ip, 4);
-        config->dhcp = false;
-        stop();
-        Ethernet.begin(config->mac, config->ip);
-        begin();
-    }
-    else if(ipprog->command & ARTNET_IPCMD_DHCP) {
-        config->dhcp = true;
-        stop();
+    if (ipprog->command & ARTNET_IPCMD_SUBNET)
+        memcpy(config->mask, ipprog->subnet, 4);
+    config->dhcp = (ipprog->command & ARTNET_IPCMD_DHCP) != 0;
+    
+    stop();
+    if (config->dhcp) {
         Ethernet.begin(config->mac);
         uint32_t ip = Ethernet.localIP();
         memcpy(config->ip, &ip, 4);
-        begin();
+        uint32_t sm = Ethernet.subnetMask();
+        memcpy(config->mask, &sm, 4);
     }
+    else
+        Ethernet.begin(config->mac, config->ip);
+    begin();
+
     sendIpProgReply();
 }
 
 void ArtNet::handleAddress() {
-    readAddress();
     artnet_address* address = (artnet_address*)getData();
     
     setShortName(address->shortName);
@@ -296,6 +352,10 @@ void ArtNet::handleAddress() {
     }
 }
 
+void ArtNet::handleTodRequest() {
+    sendTodData();
+}
+
 void ArtNet::handleAny() {
 
     uint16_t opcode = getOpCode();
@@ -304,14 +364,14 @@ void ArtNet::handleAny() {
         case ARTNET_OPCODE_POLL:
             handlePoll(); break;
 
-        case ARTNET_OPCODE_DMX:
-            handleDmx(); break;
-
         case ARTNET_OPCODE_IPPROG:
             handleIpProg(); break;
             
         case ARTNET_OPCODE_ADDRESS:
             handleAddress(); break;
+
+        case ARTNET_OPCODE_TODREQUEST:
+            handleTodRequest(); break;
 
         default:
             udp.flush();
