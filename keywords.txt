@@ -13,32 +13,11 @@ ArtNetConfig	KEYWORD1
 # Methods and Functions (KEYWORD2)
 #######################################
 
-setVersion	KEYWORD2
-setNet	KEYWORD2
-setSubNet	KEYWORD2
-setShortName	KEYWORD2
-setLongName	KEYWORD2
-setNumPorts	KEYWORD2
-setPortAddress	KEYWORD2
-setPortType	KEYWORD2
-setMac	KEYWORD2
 getOpCode	KEYWORD2
 getDmxData	KEYWORD2
 getDmxLength	KEYWORD2
 getDmxPort	KEYWORD2
 getIpCommand	KEYWORD2
-getShortName	KEYWORD2
-getLongName	KEYWORD2
-getPortType	KEYWORD2
-getPortAddress	KEYWORD2
-getPortOutFromUni	KEYWORD2
-readPoll	KEYWORD2
-readDmxHeader	KEYWORD2
-readDmxData	KEYWORD2
-readIpProg	KEYWORD2
-readAddress	KEYWORD2
-sendPollReply	KEYWORD2
-sendIpProgReply	KEYWORD2
 handleAny	KEYWORD2
 
 #######################################
