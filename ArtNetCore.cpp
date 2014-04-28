@@ -93,7 +93,8 @@ uint8_t* ArtNetCore::getDmxData() {
 }
 
 uint16_t ArtNetCore::getDmxLength() {
-    return ((artnet_dmx_header*)(buffer+sizeof(artnet_header)))->length;
+    uint16_t len = ((artnet_dmx_header*)(buffer+sizeof(artnet_header)))->length;
+    return len >> 8 | (len & 0xff) << 8;
 }
 
 uint8_t ArtNetCore::getDmxPort() {
